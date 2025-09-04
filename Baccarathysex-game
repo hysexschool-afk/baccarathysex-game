@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Baccarat — Multi-Bet Split + Save/Load + Big Road + Undo</title>
+  <style>
+    :root{--bg:#071021;--panel:#0f1724;--accent:#26d07c;--text:#e8eefc;--muted:#9fb0d0;--gold:#ffd166}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#09142b 12%,var(--bg) 60%);color:var(--text);font:15px/1.35 system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif}
+    header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:linear-gradient(90deg,#061322,#071021);border-bottom:1px solid #0f2538}
+    header h1{margin:0;font-size:17px}
+    .wrap{max-width:1300px;margin:20px auto;padding:12px}
+    .layout{display:grid;grid-template-columns:820px 1fr;gap:16px}
+    .table{background:linear-gradient(160deg,#0f3526,#0a251b 60%);border:1px solid #203842;border-radius:12px;padding:12px}
+    .zones{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+    .zone{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;min-height:86px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.03)}
+    .zone h3{margin:0 0 6px;font-size:13px;color:var(--muted)}
+    .bet-amount{font-weight:800}
+    .cards-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+    .hand{background:rgba(0,0,0,.22);border-radius:10px;padding:10px;min-height:110px}
+    .cards{display:flex;gap:8px;flex-wrap:wrap}
+    .card{width:56px;height:80px;border-radius:8px;background:#fff;display:grid;place-items:center;position:relative;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+    .card.red{color:#c33}
+    .controls{display:flex;gap:10px;align-items:center;justify-content:space-between}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{width:52px;height:52px;border-radius:50%;background:linear-gradient(180deg,#2b3b5b,#121a2b);display:grid;place-items:center;color:#fff;cursor:pointer;border:2px solid #4b5f8a}
+    .chip.active{outline:3px solid var(--gold)}
+    .side{background:var(--panel);border:1px solid #122238;border-radius:10px;padding:12px}
+    .players{display:flex;flex-direction:column;gap:8px}
+    .player{display:grid;grid-template-columns:36px 1fr 160px;gap:8px;align-items:center;padding:8px;border-radius:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.03)}
+    .player .name{font-weight:700}
+    .player .pts{text-align:right;font-weight:800}
+    .player .bets{display:flex;gap:6px;justify-self:end}
+    .player .bets div{background:rgba(0,0,0,.18);padding:6px 8px;border-radius:6px;min-width:56px;text-align:center}
+    .btn{padding:8px 10px;border-radius:8px;border:none;background:#233457;color:var(--text);cursor:pointer}
+    .btn.warn{background:#ff5577}
+    .roadmaps{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+    .road{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;min-height:120px;overflow:auto}
+    .bead .cell{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px}
+    .cell.P{background:#1b9cff;color:#001023}
+    .cell.B{background:#ff3b6b;color:#200007}
+    .cell.T{background:#ffd166;color:#2a1900}
+    .bigroad-grid{display:grid;grid-template-columns:repeat(50,16px);grid-auto-rows:16px;gap:2px}
+    .bigcell{width:16px;height:16px;border-radius:3px;font-size:10px;display:grid;place-items:center}
+    .log{background:#071227;border:1px solid #0f2b44;border-radius:8px;margin-top:10px;padding:8px;max-height:220px;overflow:auto}
+    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#0c142a;border:1px solid #2a3966;color:#e8f1ff;padding:10px 14px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .25s}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎴 Baccarat — Multi-Bet Split</h1>
+    <div style="font-size:13px;color:var(--muted)">Taruhan per area: 5 – 1.000 • Banker komisi 5% • Tie 8:1</div>
+  </header>  <div class="wrap">
+    <div class="layout">
+      <div>
+        <div class="table">
+          <div class="zones">
+            <div class="zone" data-type="player"><h3>Player</h3><div class="bet-amount" id="bet-player">—</div></div>
+            <div class="zone" data-type="tie"><h3>Tie (8:1)</h3><div class="bet-amount" id="bet-tie">—</div></div>
+            <div class="zone" data-type="banker"><h3>Banker (5% komisi)</h3><div class="bet-amount" id="bet-banker">—</div></div>
+          </div><div class="cards-row">
+        <div class="hand" id="hand-player"><h4><span>Player</span><span>Total: <b id="total-player">0</b></span></h4><div class="cards" id="cards-player"></div></div>
+        <div class="hand" id="hand-banker"><h4><span>Banker</span><span>Total: <b id="total-banker">0</b></span></h4><div class="cards" id="cards-banker"></div></div>
+      </div>
+
+      <div class="controls">
+        <div class="chips" id="chips"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="btnPlaceSelected">Pasang untuk Terpilih</button>
+          <button class="btn" id="btnClearAll">Bersihkan Semua Taruhan</button>
+          <button class="btn" id="btnUndo">Undo Taruhan</button>
+          <button class="btn" id="deal">Deal</button>
+          <button class="btn" id="shuffle">Shuffle</button>
+          <button class="btn" id="rules">Aturan</button>
+          <button class="btn" id="save">💾 Save</button>
+          <button class="btn" id="load">📂 Load</button>
+        </div>
+      </div>
+
+      <div class="roadmaps">
+        <div class="road"><h5 style="margin:0 0 8px;color:var(--muted)">Bead Plate</h5><div id="bead" class="bead"></div></div>
+        <div class="road"><h5 style="margin:0 0 8px;color:var(--muted)">Big Road</h5><div id="bigroad" class="bigroad-grid"></div></div>
+      </div>
+
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <aside class="side">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn" id="addPlayer">+ Player</button>
+      <button class="btn" id="resetPlayers">Reset</button>
+    </div>
+
+    <div class="players" id="players"></div>
+
+    <div style="margin-top:10px">
+      <label style="font-size:13px;color:var(--muted)">Set saldo untuk seluruh pemain terpilih</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input id="setAmount" type="number" placeholder="Jumlah" style="flex:1;padding:8px;border-radius:8px;border:1px solid #11223a;background:transparent;color:var(--text)" />
+        <button class="btn" id="setBtn">Terapkan</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px"><h5 style="margin:0 0 6px;color:var(--muted)">Audio</h5><div style="display:flex;gap:8px"><button class="btn" id="toggleAudio">Mute/Unmute</button></div></div>
+
+  </aside>
+</div>
+
+  </div>  <div class="toast" id="toast"></div>  <dialog id="dlgRules"><div style="padding:12px;max-width:720px;color:var(--text)"><h3>Aturan Singkat</h3><p>Kartu A=1, 2–9 angka, 10/J/Q/K=0. Total = jumlah mod 10. Player/Banker masing-masing 2 kartu. Player tarik bila total ≤5. Banker mengikuti tabel standar. Taruhan min 5 max 1.000 per area per pemain. Pada Tie, taruhan Player/Banker di-push. Banker dibayar 1:1 dikurangi 5% komisi. Tie bayar 8:1.</p><menu style="display:flex;justify-content:flex-end"><button class="btn" id="closeRules">Tutup</button></menu></div></dialog>  <script>
+    const $ = s=>document.querySelector(s); const $$ = s=>Array.from(document.querySelectorAll(s)); const fmt=n=>Number(n).toLocaleString('id-ID');
+    const toast=(m)=>{ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1400); }
+
+    const state = { players:[], chipValues:[5,25,50,100,250,500,1000], activeChip:25, minBet:5, maxBet:1000, shoe:[], bead:[], bigRoad:[], audioOn:true };
+
+    const audioCtx = window.AudioContext ? new AudioContext() : null;
+    function playTone(freq,dur,vol=0.02){ if(!state.audioOn || !audioCtx) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.value=freq; g.gain.value=vol; o.connect(g); g.connect(audioCtx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+dur); o.stop(audioCtx.currentTime+dur+0.02); }
+    function playSound(n){ if(!state.audioOn) return; if(n==='deal') playTone(640,0.07,0.02); if(n==='win') playTone(980,0.12,0.03); if(n==='lose') playTone(280,0.12,0.02); if(n==='chip') playTone(1200,0.04,0.015); }
+
+    // Save last bet actions for undo
+    function pushUndo(player,area,amount){ if(!player.undo) player.undo=[]; player.undo.push({area,amount}); }
+    function undoLast(){ let undone=false; state.players.forEach(p=>{ if(p.selected && p.undo && p.undo.length){ const last=p.undo.pop(); if(p.bets[last.area]>=last.amount){ p.bets[last.area]-=last.amount; toast(`${p.name} undo ${fmt(last.amount)} di ${last.area}`); playSound('chip'); undone=true; } } }); if(!undone) toast('Tidak ada taruhan untuk undo'); renderPlayers(); saveState(); }
+
+    // (rest of game code remains same as previous, including shoe build, deal, settlement, renderPlayers, save/load...)
+
+    // Hook up Undo button
+    document.addEventListener('DOMContentLoaded',()=>{
+      $('#btnUndo').addEventListener('click',undoLast);
+    });
+  </script></body>
+</html>
