@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HysexBaccarat Game</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0b0c10; color: #eee; text-align: center; }
+    h1 { color: #e94560; }
+    .game { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+    .controls, .bets, .players, .roadmaps, .actions { margin: 10px; padding: 10px; background: #1f2833; border-radius: 8px; }
+    .bets button, .controls button, .actions button { margin: 5px; padding: 8px 14px; background: #45a29e; border: none; border-radius: 5px; cursor: pointer; color: #fff; }
+    .bets button:hover, .controls button:hover, .actions button:hover { background: #66fcf1; color: #000; }
+    .player-card { border: 1px solid #444; padding: 10px; margin: 5px; border-radius: 5px; background: #0b0c10; }
+    .roadmap-grid { display: grid; grid-template-columns: repeat(20, 15px); grid-auto-rows: 15px; gap: 2px; justify-content: center; }
+    .cell { width: 15px; height: 15px; border-radius: 50%; }
+    .P { background: #4fa3f7; }
+    .B { background: #e94560; }
+    .T { background: #f4d35e; }
+  </style>
+</head>
+<body>
+  <h1>🎲 HysexBaccarat 🎲</h1>
+  <div class="game">
+    <div class="controls">
+      <button onclick="addPlayer()">Tambah Pemain</button>
+      <button onclick="saveGame()">💾 Save</button>
+      <button onclick="loadGame()">📂 Load</button>
+      <button onclick="shuffleShoe()">🔄 Shuffle</button>
+      <button onclick="toggleMute()">🔇/🔊</button>
+    </div>
+
+    <div class="players" id="players"></div>
+
+    <div class="bets">
+      <h3>Pilih Chip</h3>
+      <button onclick="setChip(5)">5</button>
+      <button onclick="setChip(25)">25</button>
+      <button onclick="setChip(50)">50</button>
+      <button onclick="setChip(100)">100</button>
+      <button onclick="setChip(250)">250</button>
+      <button onclick="setChip(500)">500</button>
+      <button onclick="setChip(1000)">1000</button>
+      <p>Chip saat ini: <span id="currentChip">5</span></p>
+    </div>
+
+    <div class="actions">
+      <button onclick="deal()">▶ Deal</button>
+      <p id="roundResult"></p>
+    </div>
+
+    <div class="roadmaps">
+      <h3>Bead Plate</h3>
+      <div id="bead" class="roadmap-grid"></div>
+      <h3>Big Road</h3>
+      <div id="bigroad" class="roadmap-grid"></div>
+    </div>
+  </div>
+
+  <script>
+    let state = {
+      players: [],
+      currentChip: 5,
+      muted: false,
+      shoe: [],
+      history: [],
+      bigRoad: [],
+    };
+
+    const sounds = {
+      chip: new Audio(),
+      deal: new Audio(),
+      win: new Audio(),
+      lose: new Audio(),
+      shuffle: new Audio(),
+    };
+    function playSound(type) { if (!state.muted) try { sounds[type].play(); } catch {} }
+
+    function toggleMute(){ state.muted = !state.muted; }
+    function setChip(v){ state.currentChip = v; document.getElementById("currentChip").innerText = v; }
+
+    function addPlayer(){
+      const id = state.players.length+1;
+      state.players.push({id, points:1000, bets:{P:[],B:[],T:[]}});
+      renderPlayers();
+    }
+
+    function renderPlayers(){
+      const container = document.getElementById("players");
+      container.innerHTML = '';
+      state.players.forEach(p=>{
+        const div = document.createElement("div");
+        div.className = "player-card";
+        div.innerHTML = `<b>Player ${p.id}</b><br>Saldo: ${p.points}<br>
+          Taruhan: P(${sum(p.bets.P)}), B(${sum(p.bets.B)}), T(${sum(p.bets.T)})<br>
+          <button onclick="bet(${p.id},'P')">+P</button>
+          <button onclick="bet(${p.id},'B')">+B</button>
+          <button onclick="bet(${p.id},'T')">+T</button>
+          <button onclick="undoBet(${p.id})">↩ Undo</button>`;
+        container.appendChild(div);
+      });
+    }
+
+    function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
+
+    function bet(pid, side){
+      let p = state.players.find(x=>x.id===pid);
+      if (!p || p.points < state.currentChip) return;
+      p.points -= state.currentChip;
+      p.bets[side].push(state.currentChip);
+      p.lastBet = {side, amt:state.currentChip};
+      playSound('chip');
+      renderPlayers();
+    }
+
+    function undoBet(pid){
+      let p = state.players.find(x=>x.id===pid);
+      if(!p || !p.lastBet) return;
+      const {side, amt} = p.lastBet;
+      let idx = p.bets[side].lastIndexOf(amt);
+      if(idx>-1){ p.bets[side].splice(idx,1); p.points+=amt; }
+      p.lastBet = null;
+      renderPlayers();
+    }
+
+    function shuffleShoe(){
+      state.shoe = [];
+      const suits = ['H','D','C','S'];
+      const vals = [1,2,3,4,5,6,7,8,9,10,10,10,10];
+      for(let d=0;d<8;d++){
+        for(let s of suits){ for(let v of vals){ state.shoe.push({s,v}); } }
+      }
+      for(let i=state.shoe.length-1;i>0;i--){
+        const j=Math.floor(Math.random()* (i+1));
+        [state.shoe[i],state.shoe[j]]=[state.shoe[j],state.shoe[i]];
+      }
+      playSound('shuffle');
+    }
+
+    function draw(){ return state.shoe.pop(); }
+
+    function deal(){
+      if(state.shoe.length<6) shuffleShoe();
+      let ph=[draw(),draw()];
+      let bh=[draw(),draw()];
+      let pv = baccaratValue(ph);
+      let bv = baccaratValue(bh);
+      let winner = (pv>bv)?'P':(bv>pv)?'B':'T';
+      state.history.push(winner);
+      updateRoadmaps(winner);
+
+      state.players.forEach(p=>{
+        let payout=0;
+        let betP=sum(p.bets.P), betB=sum(p.bets.B), betT=sum(p.bets.T);
+        if(winner==='P' && betP>0) payout+= betP*2;
+        if(winner==='B' && betB>0) payout+= betB*1.95;
+        if(winner==='T'){
+          if(betT>0) payout+= betT*9;
+          payout+= betP+betB;
+        }
+        if(payout>0){ playSound('win'); } else { playSound('lose'); }
+        p.points+=payout;
+        p.bets={P:[],B:[],T:[]};
+        p.lastBet=null;
+      });
+
+      document.getElementById("roundResult").innerText = `Hasil: ${winner==='P'?'PLAYER':'BANKER'}${winner==='T'?' (TIE)':''}`;
+      renderPlayers();
+    }
+
+    function baccaratValue(hand){ return hand.reduce((a,c)=>a+c.v,0)%10; }
+
+    function updateRoadmaps(winner){
+      let bead = document.getElementById("bead");
+      let big = document.getElementById("bigroad");
+      let c = document.createElement("div"); c.className='cell '+winner; bead.appendChild(c);
+      let last = state.bigRoad.length?state.bigRoad[state.bigRoad.length-1]:null;
+      if(!last || (last.winner!==winner && winner!=='T')){
+        state.bigRoad.push({winner, row:0});
+      } else { last.row++; }
+      big.innerHTML='';
+      state.bigRoad.forEach(e=>{
+        let d=document.createElement("div");
+        d.className='cell '+e.winner; big.appendChild(d);
+      });
+    }
+
+    function saveGame(){ localStorage.setItem('hysexbaccarat_state', JSON.stringify(state)); alert('Game tersimpan'); }
+    function loadGame(){
+      let d=localStorage.getItem('hysexbaccarat_state');
+      if(!d) return;
+      state=JSON.parse(d);
+      renderPlayers();
+      document.getElementById("bead").innerHTML='';
+      document.getElementById("bigroad").innerHTML='';
+      state.history.forEach(h=>updateRoadmaps(h));
+    }
+
+    shuffleShoe();
+    renderPlayers();
+  </script>
+</body>
+</html>      const vals = [1,2,3,4,5,6,7,8,9,10,10,10,10];
+      for(let d=0;d<8;d++){
+        for(let s of suits){ for(let v of vals){ state.shoe.push({s,v}); } }
+      }
+      for(let i=state.shoe.length-1;i>0;i--){
+        const j=Math.floor(Math.random()* (i+1));
+        [state.shoe[i],state.shoe[j]]=[state.shoe[j],state.shoe[i]];
+      }
+      playSound('shuffle');
+    }
+
+    function draw(){ return state.shoe.pop(); }
+
+    function deal(){
+      if(state.shoe.length<6) shuffleShoe();
+      let ph=[draw(),draw()];
+      let bh=[draw(),draw()];
+      let pv = baccaratValue(ph);
+      let bv = baccaratValue(bh);
+      let winner = (pv>bv)?'P':(bv>pv)?'B':'T';
+      state.history.push(winner);
+      updateRoadmaps(winner);
+
+      state.players.forEach(p=>{
+        let payout=0;
+        let betP=sum(p.bets.P), betB=sum(p.bets.B), betT=sum(p.bets.T);
+        if(winner==='P' && betP>0) payout+= betP*2;
+        if(winner==='B' && betB>0) payout+= betB*1.95;
+        if(winner==='T'){
+          if(betT>0) payout+= betT*9;
+          payout+= betP+betB;
+        }
+        if(payout>0){ playSound('win'); } else { playSound('lose'); }
+        p.points+=payout;
+        p.bets={P:[],B:[],T:[]};
+        p.lastBet=null;
+      });
+
+      document.getElementById("roundResult").innerText = `Hasil: ${winner==='P'?'PLAYER':'BANKER'}${winner==='T'?' (TIE)':''}`;
+      renderPlayers();
+    }
+
+    function baccaratValue(hand){ return hand.reduce((a,c)=>a+c.v,0)%10; }
+
+    function updateRoadmaps(winner){
+      let bead = document.getElementById("bead");
+      let big = document.getElementById("bigroad");
+      let c = document.createElement("div"); c.className='cell '+winner; bead.appendChild(c);
+      let last = state.bigRoad.length?state.bigRoad[state.bigRoad.length-1]:null;
+      if(!last || (last.winner!==winner && winner!=='T')){
+        state.bigRoad.push({winner, row:0});
+      } else { last.row++; }
+      big.innerHTML='';
+      state.bigRoad.forEach(e=>{
+        let d=document.createElement("div");
+        d.className='cell '+e.winner; big.appendChild(d);
+      });
+    }
+
+    function saveGame(){ localStorage.setItem('hysexbaccarat_state', JSON.stringify(state)); alert('Game tersimpan'); }
+    function loadGame(){
+      let d=localStorage.getItem('hysexbaccarat_state');
+      if(!d) return;
+      state=JSON.parse(d);
+      renderPlayers();
+      document.getElementById("bead").innerHTML='';
+      document.getElementById("bigroad").innerHTML='';
+      state.history.forEach(h=>updateRoadmaps(h));
+    }
+
+    shuffleShoe();
+    renderPlayers();
+  </script></body>
+</html>
